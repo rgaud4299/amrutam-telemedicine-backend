@@ -61,38 +61,42 @@ jobs:
           cache-to: type=gha,mode=max
 
       ####################################################
-      # Configure kubectl
+      # Configure kubectl (Optional if EKS cluster exists)
       ####################################################
 
       - name: Configure kubectl
+        if: env.EKS_CLUSTER_NAME != ''
         run: |
           aws eks update-kubeconfig \
             --name $EKS_CLUSTER_NAME \
             --region $AWS_REGION
 
       ####################################################
-      # Update API
+      # Update API (Optional)
       ####################################################
 
       - name: Deploy API
+        if: env.EKS_CLUSTER_NAME != ''
         run: |
           kubectl set image deployment/amrutam-api \
           amrutam-api=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
           -n amrutam
 
       ####################################################
-      # Wait for Rollout
+      # Wait for Rollout (Optional)
       ####################################################
 
       - name: Wait for Deployments
+        if: env.EKS_CLUSTER_NAME != ''
         run: |
           kubectl rollout status deployment/amrutam-api -n amrutam --timeout=10m
 
       ####################################################
-      # Verify
+      # Verify (Optional)
       ####################################################
 
       - name: Verify Deployment
+        if: env.EKS_CLUSTER_NAME != ''
         run: |
           kubectl get deployments -n amrutam
           kubectl get pods -n amrutam -o wide
