@@ -1,0 +1,98 @@
+name: Deploy Amrutam Telemedicine Backend
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+ 
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      ####################################################
+      # Docker Buildx
+      ####################################################
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      ####################################################
+      # Build & Push Image
+      ####################################################
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      ####################################################
+      # Configure kubectl
+      ####################################################
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --name $EKS_CLUSTER_NAME \
+            --region $AWS_REGION
+
+      ####################################################
+      # Update API
+      ####################################################
+
+      - name: Deploy API
+        run: |
+          kubectl set image deployment/amrutam-api \
+          amrutam-api=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+          -n amrutam
+
+      ####################################################
+      # Wait for Rollout
+      ####################################################
+
+      - name: Wait for Deployments
+        run: |
+          kubectl rollout status deployment/amrutam-api -n amrutam --timeout=10m
+
+      ####################################################
+      # Verify
+      ####################################################
+
+      - name: Verify Deployment
+        run: |
+          kubectl get deployments -n amrutam
+          kubectl get pods -n amrutam -o wide

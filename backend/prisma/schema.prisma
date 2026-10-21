@@ -1,0 +1,163 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  phone                String?        @unique
+  passwordHash         String
+  role                 Role
+  isMfaEnabled         Boolean        @default(false)
+  status               UserStatus     @default(ACTIVE)
+  createdAt            DateTime       @default(now())
+  profile              Profile?
+  doctorInfo           Doctor?
+  patientConsultations Consultation[] @relation("PatientConsultations")
+  doctorConsultations  Consultation[] @relation("DoctorConsultations")
+  prescriptions        Prescription[]
+  payments             Payment[]
+  auditLogs            AuditLog[]
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum BloodGroup {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  AB_POS
+  AB_NEG
+  O_POS
+  O_NEG
+}
+
+enum ConsultationStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model Profile {
+  id         String      @id @default(uuid())
+  userId     String      @unique
+  firstName  String
+  lastName   String
+  gender     Gender?
+  dob        DateTime?
+  bloodGroup BloodGroup?
+  address    String?
+  user       User        @relation(fields: [userId], references: [id])
+}
+
+model Doctor {
+  id              String             @id @default(uuid())
+  userId          String             @unique
+  specialization  String
+  qualifications  String?
+  experienceYears Int?
+  feeCents        Int?
+  bio             String?
+  licenseNumber   String?
+  rating          Float?             @default(0)
+  user            User               @relation(fields: [userId], references: [id])
+  slots           AvailabilitySlot[]
+}
+
+model AvailabilitySlot {
+  id            String         @id @default(uuid())
+  doctorId      String
+  date          DateTime
+  startTime     DateTime
+  endTime       DateTime
+  isBooked      Boolean        @default(false)
+  version       Int            @default(0)
+  doctor        Doctor         @relation(fields: [doctorId], references: [id])
+  consultations Consultation[]
+}
+
+model Consultation {
+  id           String             @id @default(uuid())
+  patientId    String
+  doctorId     String
+  slotId       String
+  status       ConsultationStatus @default(PENDING)
+  meetingLink  String?
+  createdAt    DateTime           @default(now())
+  patient      User               @relation("PatientConsultations", fields: [patientId], references: [id])
+  doctor       User               @relation("DoctorConsultations", fields: [doctorId], references: [id])
+  slot         AvailabilitySlot   @relation(fields: [slotId], references: [id])
+  prescription Prescription?
+  payment      Payment?
+}
+
+model Prescription {
+  id               String       @id @default(uuid())
+  consultationId   String       @unique
+  doctorId         String
+  patientId        String
+  diagnosis        String?
+  medications      Json?
+  instructions     String?
+  digitalSignature String?
+  createdAt        DateTime     @default(now())
+  consultation     Consultation @relation(fields: [consultationId], references: [id])
+  patient          User         @relation(fields: [patientId], references: [id])
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  consultationId String        @unique
+  patientId      String
+  amountCents    Int
+  currency       String        @default("USD")
+  status         PaymentStatus @default(PENDING)
+  idempotencyKey String        @unique
+  transactionId  String?
+  createdAt      DateTime      @default(now())
+  consultation   Consultation  @relation(fields: [consultationId], references: [id])
+  patient        User          @relation(fields: [patientId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  timestamp DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}

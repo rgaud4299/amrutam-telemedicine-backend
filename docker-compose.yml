@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: amrutam_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: amrutam_telemedicine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: amrutam_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: amrutam_backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "9000:9000"
+    environment:
+      PORT: 9000
+      HOST: "0.0.0.0"
+      DATABASE_URL: "postgresql://postgres:postgrespassword@postgres:5432/amrutam_telemedicine?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      ACCESS_TOKEN_SECRET: "amrutam_production_secure_jwt_access_token_secret_key"
+      REFRESH_TOKEN_SECRET: "amrutam_production_secure_jwt_refresh_token_secret_key"
+      ADMIN_ACCESS_TOKEN_SECRET: "amrutam_production_secure_jwt_admin_token_secret_key"
+
+volumes:
+  postgres_data:
+  redis_data:
